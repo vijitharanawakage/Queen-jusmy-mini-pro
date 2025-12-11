@@ -10,7 +10,7 @@ import path from "path";
 
 const SESSIONS_DIR = path.join(process.cwd(), "sessions");
 
-// Bot defaults
+// bot defaults
 const BOT_NAME = "< | 𝐐ᴜᴇᴇɴ 𝐉ᴜꜱᴍʏ 𝐌ɪɴɪ 🧚‍♀️";
 const OWNER_NAME = "Mr Sandesh Bhashana";
 const OWNER_NUMBER = "+94741259325";
@@ -20,13 +20,16 @@ const BOT_IMAGE = "https://files.catbox.moe/xu4725.jpg";
 const AUTO_LIKE_RATE_LIMIT_MS = 5 * 1000;
 const MAX_LIKES_PER_MINUTE = 30;
 
-// Keep a map of running sessions
+// keep map of running sessions
 const running = new Map();
 
 export async function startAllSessions() {
   await fs.ensureDir(SESSIONS_DIR);
   const folders = await fs.readdir(SESSIONS_DIR);
   for (const f of folders) {
+    const folderPath = path.join(SESSIONS_DIR, f);
+    const stat = await fs.stat(folderPath);
+    if (!stat.isDirectory()) continue; // skip files
     if (!running.has(f)) {
       startSessionBot(f).catch(err => console.error(`startSessionBot(${f}) failed:`, err));
       await new Promise(r => setTimeout(r, 500));
@@ -34,36 +37,19 @@ export async function startAllSessions() {
   }
 }
 
-async function loadSettings(sessionId) {
-  const sfile = path.join(SESSIONS_DIR, sessionId, "settings.json");
-  if (!(await fs.pathExists(sfile))) {
-    const defaultSettings = {
-      alwaysOnline: false,
-      antiDelete: true,
-      antiViewOnce: true,
-      autoLike: false,
-      likedStatus: [],
-      lastAutoLikeAt: 0,
-      likesThisWindow: 0,
-      windowStart: Date.now()
-    };
-    await fs.writeJson(sfile, defaultSettings, { spaces: 2 });
-    return defaultSettings;
-  }
-  return fs.readJson(sfile);
-}
-
-async function saveSettings(sessionId, settings) {
-  const sfile = path.join(SESSIONS_DIR, sessionId, "settings.json");
-  await fs.writeJson(sfile, settings, { spaces: 2 });
-}
-
-async function startSessionBot(sessionId) {
+export async function startSessionBot(sessionId) {
   const dir = path.join(SESSIONS_DIR, sessionId);
-  if (!(await fs.pathExists(dir))) {
-    console.warn("session dir missing:", dir);
+  const stat = await fs.stat(dir).catch(() => null);
+  if (!stat || !stat.isDirectory()) {
+    console.warn(`Session folder missing or invalid: ${dir}`);
     return;
   }
+
+  if (running.has(sessionId)) {
+    console.log(`[${sessionId}] already running`);
+    return;
+  }
+
   running.set(sessionId, { status: "starting" });
 
   const { state, saveCreds } = await useMultiFileAuthState(dir);
@@ -79,32 +65,31 @@ async function startSessionBot(sessionId) {
 
   conn.ev.on("creds.update", saveCreds);
 
-  let settings = await loadSettings(sessionId);
-  settings.likedStatus = settings.likedStatus || [];
+  // load settings
+  const settingsPath = path.join(dir, "settings.json");
+  let settings = {};
+  if (!(await fs.pathExists(settingsPath))) {
+    settings = {
+      alwaysOnline: false,
+      antiDelete: true,
+      antiViewOnce: true,
+      autoLike: false,
+      likedStatus: [],
+      lastAutoLikeAt: 0,
+      likesThisWindow: 0,
+      windowStart: 0
+    };
+    await fs.writeJson(settingsPath, settings, { spaces: 2 });
+  } else {
+    settings = await fs.readJson(settingsPath);
+  }
 
-  // Connection updates
+  running.set(sessionId, { conn, settings });
+
+  // connection updates
   conn.ev.on("connection.update", async (update) => {
     const { connection, lastDisconnect } = update;
-    if (connection === "open") {
-      console.log(`[${sessionId}] connected`);
-      const buttons = [
-        { buttonId: "ping", buttonText: { displayText: "Ping Bot" }, type: 1 },
-        { buttonId: "owner", buttonText: { displayText: "Owner Info" }, type: 1 }
-      ];
-      const msg = {
-        image: { url: BOT_IMAGE },
-        caption:
-          `👑 ${BOT_NAME}\n\n` +
-          `🧾 Owner: ${OWNER_NAME}\n` +
-          `📞 ${OWNER_NUMBER}\n\n` +
-          `✨ Bot is now Online! (session: ${sessionId})`,
-        footer: "QUEEN-JUSMY-MINI",
-        buttons,
-        headerType: 4
-      };
-      try { await conn.sendMessage(CHANNEL_JID, msg); } 
-      catch (e) { console.log(`[${sessionId}] warn: cannot send message: ${e?.message || e}`); }
-    }
+    if (connection === "open") console.log(`[${sessionId}] connected`);
     if (connection === "close") {
       const reason = lastDisconnect?.error?.output?.statusCode;
       console.log(`[${sessionId}] connection closed:`, reason || lastDisconnect?.error?.message || lastDisconnect);
@@ -116,150 +101,15 @@ async function startSessionBot(sessionId) {
     }
   });
 
-  // Presence keep-alive
+  // presence keep-alive
   setInterval(async () => {
-    try { if (settings.alwaysOnline) await conn.sendPresenceUpdate("available"); } catch {}
+    if (settings.alwaysOnline) await conn.sendPresenceUpdate("available").catch(()=>{});
   }, 20_000);
 
-  // Anti-delete
-  conn.ev.on("messages.update", async (updates) => {
-    if (!settings.antiDelete) return;
-    for (const upd of updates) {
-      try {
-        if (!upd.update || upd.update.message == null) {
-          const key = upd.key;
-          const sender = key.participant || key.remoteJid;
-          const toJid = key.remoteJid;
-          await conn.sendMessage(toJid, {
-            text: `♻️ *Deleted Message Detected*\nFrom: @${(sender || "").split?.("@")?.[0] || sender}`,
-            mentions: sender ? [sender] : []
-          });
-        }
-      } catch {}
-    }
-  });
+  // persist settings every 15s
+  setInterval(async () => {
+    await fs.writeJson(settingsPath, settings, { spaces: 2 }).catch(()=>{});
+  }, 15_000);
 
-  // Messages handler
-  conn.ev.on("messages.upsert", async ({ messages }) => {
-    try {
-      const m = messages[0];
-      if (!m || !m.message || (m.key && m.key.fromMe)) return;
-      const jid = m.key.remoteJid;
-
-      // Button responses
-      if (m.message.buttonsResponseMessage) {
-        const bid = m.message.buttonsResponseMessage.selectedButtonId;
-        if (bid === "ping") await conn.sendMessage(jid, { text: "🏓 PONG! QUEEN-JUSMY-MINI here." });
-        if (bid === "owner") await conn.sendMessage(jid, { text: `👤 Owner: ${OWNER_NAME}\n📞 ${OWNER_NUMBER}` });
-        return;
-      }
-
-      // Anti-view-once
-      const v1 = m.message.viewOnceMessage?.message;
-      const v2 = m.message.viewOnceMessageV2?.message;
-      const media = v2 || v1;
-      if (settings.antiViewOnce && media) {
-        try {
-          await conn.sendMessage(jid, { text: "👁 View-once prevented — saving content..." });
-          await conn.sendMessage(jid, media, { quoted: m });
-        } catch {}
-      }
-
-      // Text commands
-      const text =
-        m.message.conversation ||
-        m.message.extendedTextMessage?.text ||
-        (m.message.imageMessage && m.message.imageMessage.caption) ||
-        "";
-      if (!text) return;
-      const low = text.trim().toLowerCase();
-
-      if (low === ".menu") {
-        const menu = `👑 QUEEN-JUSMY-MINI MENU
-
-⚙ Settings:
-• .always on / off
-• .antidelete on / off
-• .antiviewonce on / off
-• .autolike on / off
-
-📦 Session:
-• .session (show current session)
-• .statuslog (show liked statuses)
-
-Type "hi" to test.`;
-        await conn.sendMessage(jid, { text: menu });
-        return;
-      }
-
-      if (low === "hi") { await conn.sendMessage(jid, { text: `Hey 👋 I'm ${BOT_NAME}` }); return; }
-      if (low === ".always on") { settings.alwaysOnline = true; await saveSettings(sessionId, settings); await conn.sendMessage(jid, { text: "✅ Always Online: ON" }); return; }
-      if (low === ".always off") { settings.alwaysOnline = false; await saveSettings(sessionId, settings); await conn.sendMessage(jid, { text: "✅ Always Online: OFF" }); return; }
-
-      if (low === ".antidelete on") { settings.antiDelete = true; await saveSettings(sessionId, settings); await conn.sendMessage(jid, { text: "✅ Anti-Delete: ON" }); return; }
-      if (low === ".antidelete off") { settings.antiDelete = false; await saveSettings(sessionId, settings); await conn.sendMessage(jid, { text: "✅ Anti-Delete: OFF" }); return; }
-
-      if (low === ".antiviewonce on") { settings.antiViewOnce = true; await saveSettings(sessionId, settings); await conn.sendMessage(jid, { text: "✅ Anti-View-Once: ON" }); return; }
-      if (low === ".antiviewonce off") { settings.antiViewOnce = false; await saveSettings(sessionId, settings); await conn.sendMessage(jid, { text: "✅ Anti-View-Once: OFF" }); return; }
-
-      if (low === ".autolike on") { settings.autoLike = true; await saveSettings(sessionId, settings); await conn.sendMessage(jid, { text: "✅ Status Auto-Like: ON" }); return; }
-      if (low === ".autolike off") { settings.autoLike = false; await saveSettings(sessionId, settings); await conn.sendMessage(jid, { text: "✅ Status Auto-Like: OFF" }); return; }
-
-      if (low.startsWith(".session")) { await conn.sendMessage(jid, { text: `Current Session: ${sessionId}` }); return; }
-      if (low.startsWith(".statuslog")) { 
-        const log = (settings.likedStatus && settings.likedStatus.length) ? settings.likedStatus.join("\n") : "No statuses liked yet."; 
-        await conn.sendMessage(jid, { text: `📝 Liked Status Log:\n${log}` }); 
-        return; 
-      }
-
-    } catch (e) { }
-  });
-
-  // Status auto-like
-  conn.ev.on("statuses.update", async (updates) => {
-    try {
-      if (!settings.autoLike) return;
-
-      const now = Date.now();
-      if (!settings.windowStart || now - settings.windowStart > 60_000) {
-        settings.windowStart = now;
-        settings.likesThisWindow = 0;
-      }
-
-      for (const st of updates) {
-        const statusId = st.id;
-        const owner = statusId?.split?.("_")?.[0];
-        if (!statusId || !owner) continue;
-        settings.likedStatus = settings.likedStatus || [];
-        if (settings.likedStatus.includes(statusId)) continue;
-
-        const lastAt = settings.lastAutoLikeAt || 0;
-        const sinceLast = now - lastAt;
-        if (sinceLast < AUTO_LIKE_RATE_LIMIT_MS) continue;
-        if ((settings.likesThisWindow || 0) >= MAX_LIKES_PER_MINUTE) continue;
-
-        const statusJid = `${owner}@s.whatsapp.net`;
-        try {
-          await conn.sendMessage(statusJid, {
-            react: { text: "❤️", key: { id: statusId, remoteJid: statusJid } }
-          });
-          settings.likedStatus.push(statusId);
-          settings.lastAutoLikeAt = Date.now();
-          settings.likesThisWindow = (settings.likesThisWindow || 0) + 1;
-          await saveSettings(sessionId, settings);
-          console.log(`[${sessionId}] Auto-liked status ${statusId} from ${statusJid}`);
-        } catch (e) {
-          console.log(`[${sessionId}] Auto-like error:`, e?.message || e);
-        }
-      }
-    } catch (e) {}
-  });
-
-  // Persist settings every 15s
-  setInterval(() => saveSettings(sessionId, settings), 15_000);
-
-  running.set(sessionId, { conn, settings });
   console.log(`[${sessionId}] initialized`);
 }
-
-// ✅ Removed duplicate export. Already exported with `export async function startAllSessions()`
