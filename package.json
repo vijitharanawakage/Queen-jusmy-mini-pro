@@ -1,0 +1,13 @@
+{
+  "name": "queen-jusmy-mini-pro",
+  "version": "1.0.0",
+  "type": "module",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "@whiskeysockets/baileys": "github:vijitharanawakage/QueenJusmy-Baileys",
+    "pino": "^8.0.0",
+    "fs-extra": "^11.1.1"
+  }
+}
