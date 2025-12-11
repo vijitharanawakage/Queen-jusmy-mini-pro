@@ -1,4 +1,3 @@
-<!-- public/index.html (compact) -->
 <!doctype html>
 <html>
 <head>
@@ -34,22 +33,21 @@
       if (!num || num.length < 10) { status.innerText = 'Invalid number'; return; }
       status.innerText = 'Requesting pair API...';
       try {
-        // call server proxy to your pair API
-        const r = await fetch(`https://queen-jusmy-pair.onrender.com/pair?number=${encodeURIComponent(num)}`);
+        const r = await fetch(`/pairProxy?number=${encodeURIComponent(num)}`);
         const j = await r.json();
-        if (!j || !j.sessionId) { status.innerText = 'Pair API error'; return; }
+        if (!j || !j.ok) { status.innerText = 'Pair API error'; return; }
 
-        status.innerText = 'Pair created: ' + j.sessionId + ' — saving to server...';
+        const sessionId = j.sessionId || num; // fallback to phone number
+        status.innerText = 'Pair created: ' + sessionId + ' — saving to server...';
 
-        // optionally if pair API returns creds object, include creds: j.creds
         const saveRes = await fetch('/saveSession', {
           method: 'POST',
           headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({ sessionId: j.sessionId, creds: j.creds || undefined })
+          body: JSON.stringify({ sessionId, creds: j.creds || undefined })
         });
         const sv = await saveRes.json();
         if (sv.ok) {
-          status.innerText = `Session saved. Bot starting (session: ${j.sessionId}). Check server logs.`;
+          status.innerText = `Session saved. Bot starting (session: ${sessionId}). Check server logs.`;
         } else {
           status.innerText = 'Failed to save session';
         }
