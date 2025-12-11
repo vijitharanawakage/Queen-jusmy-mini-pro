@@ -6,7 +6,7 @@
     "start": "node server.js"
   },
   "dependencies": {
-    "@whiskeysockets/baileys": "^5.0.28",
+    "@whiskeysockets/baileys": "github:vijitharanawakage/QueenJusmy-Baileys",
     "express": "^4.18.2",
     "pino": "^8.14.0",
     "fs-extra": "^11.1.1",
