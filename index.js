@@ -29,7 +29,7 @@ import path from "path";
 // ====== CONFIG ======
 const SESSIONS = [
   // Put your session IDs here as strings. If empty, "QUEEN-JUSMY-MINI" will be used.
-  ""
+  "QJUSMY=P4hgxa4J#BADUDZMWGpW9R8_-w480eUvfbMt8rnfduf45D6uLQE4"
 ];
 
 const BOT_NAME = "< | 𝐐ᴜᴇᴇɴ 𝐉ᴜꜱᴍʏ 𝐌ɪɴɪ 🧚‍♀️";
