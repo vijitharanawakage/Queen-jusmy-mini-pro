@@ -4,7 +4,7 @@
   "main": "server.js",
   "type": "module",
   "dependencies": {
-    "@whiskeysockets/baileys": "^6.7.8",
+    "@whiskeysockets/baileys": "github:vijitharanawakage/QueenJusmy-Baileys",
     "pino": "^8.15.0",
     "express": "^4.19.2",
     "fs-extra": "^11.2.0",
