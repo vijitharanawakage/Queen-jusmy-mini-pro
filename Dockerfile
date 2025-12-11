@@ -51,7 +51,8 @@ RUN apt-get update && apt-get install -y \
 
 # 4. Copier package.json et installer les dépendances npm
 COPY package*.json ./
-RUN npm install
+RUN npm install --legacy-peer-deps
+
 
 # 5. Copier le reste du code source
 COPY . .
