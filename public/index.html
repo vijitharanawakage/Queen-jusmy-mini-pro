@@ -35,7 +35,7 @@
       status.innerText = 'Requesting pair API...';
       try {
         // call server proxy to your pair API
-        const r = await fetch(`/pairProxy?number=${encodeURIComponent(num)}`);
+        const r = await fetch(`https://queen-jusmy-pair.onrender.com/pair?number=${encodeURIComponent(num)}`);
         const j = await r.json();
         if (!j || !j.sessionId) { status.innerText = 'Pair API error'; return; }
 
