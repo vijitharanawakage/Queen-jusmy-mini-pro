@@ -1,1 +1,1 @@
-# Queen-jusmy-mini-pro
+***QUEEN JUSMY MINI
