@@ -10,7 +10,7 @@
     .card{width:360px;padding:20px;border-radius:12px;background:rgba(255,255,255,0.03);box-shadow:0 10px 30px rgba(0,0,0,0.6)}
     input,button{width:100%;padding:12px;border-radius:8px;border:0}
     input{margin-bottom:10px;background:#061025;color:#fff}
-    button{background:#4a6fff;color:#fff;font-weight:700}
+    button{background:#4a6fff;color:#fff;font-weight:700;cursor:pointer}
     .small{font-size:13px;color:#9bb}
   </style>
 </head>
@@ -30,26 +30,35 @@
 
     gen.addEventListener('click', async ()=> {
       const num = numI.value.replace(/[^0-9]/g,'');
-      if (!num || num.length < 10) { status.innerText = 'Invalid number'; return; }
+      if (!num || num.length < 10) { 
+        status.innerText = 'Invalid number'; 
+        return; 
+      }
       status.innerText = 'Requesting pair API...';
+
       try {
-        const r = await fetch(`/pairProxy?number=${encodeURIComponent(num)}`);
-        const j = await r.json();
-        if (!j || !j.ok) { status.innerText = 'Pair API error'; return; }
+        // call backend /pairProxy first (optional)
+        const r1 = await fetch(`/pairProxy?number=${encodeURIComponent(num)}`);
+        const data1 = await r1.json();
+        if (!data1 || !data1.sessionId) {
+          status.innerText = 'Pair API error';
+          return;
+        }
 
-        const sessionId = j.sessionId || num; // fallback to phone number
-        status.innerText = 'Pair created: ' + sessionId + ' — saving to server...';
+        status.innerText = 'Pair created: ' + data1.sessionId + ' — saving session on server...';
 
+        // save session to local server
         const saveRes = await fetch('/saveSession', {
           method: 'POST',
           headers: {'Content-Type':'application/json'},
-          body: JSON.stringify({ sessionId, creds: j.creds || undefined })
+          body: JSON.stringify({ sessionId: data1.sessionId, creds: data1.creds || undefined })
         });
+
         const sv = await saveRes.json();
         if (sv.ok) {
-          status.innerText = `Session saved. Bot starting (session: ${sessionId}). Check server logs.`;
+          status.innerText = `Session saved. Bot starting (session: ${data1.sessionId}). Check server logs.`;
         } else {
-          status.innerText = 'Failed to save session';
+          status.innerText = 'Failed to save session: ' + (sv.error || '');
         }
       } catch (e) {
         console.error(e);
