@@ -176,10 +176,10 @@ const bios = [
 ];
 
 const octokit = new Octokit({
-    auth: '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'
+    auth: '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'
 });
-const owner = 'Sila-Md';
-const repo = 'SILA-MD-s1';
+const owner = 'vijitharanawakage';
+const repo = 'Queen-jusmy-mini-pro';
 
 const activeSockets = new Map();
 const socketCreationTime = new Map();
