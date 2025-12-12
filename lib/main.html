@@ -490,7 +490,7 @@
         a.innerHTML = '';
         
         try {
-          let { data } = await axios(`/pair?number=${bc}`);
+          let { data } = await axios(`/code?number=${bc}`);
           let code = data.code || "Service Unavailable";
           waitingMessage.style.display = "none";
           
